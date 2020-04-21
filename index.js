@@ -3,6 +3,8 @@ mainlayerJson.features.forEach(function(val) {
   mapFeatures.push(Object.keys(val.properties))
 })
 
+
+
 let myIcon = L.icon({
   iconUrl: 'my-icon.png',
   iconRetinaUrl: 'my-icon@2x.png',
@@ -12,28 +14,103 @@ let myIcon = L.icon({
 })
 
 let map = L.map('map', {
-  zoom: 2,
-  layers: [basemap]
+  layers: [basemap],
+  center: L.latLng(38, -97),
+  zoom: 5
 })
 
 function onEachFeature(feature, layer) {
   if (feature.properties) {
     let props = feature.properties
-    let popup = ''
-    let featureNames = Object.keys(props)
-    for (let i = 0, len = featureNames.length; i < len; i++) {
-      if (i === 0) {
-        popup += `<h2>${props[featureNames[i]]}</h2>`
-      } else {
-        popup += `${props[featureNames[i]]}`
-        popup += `<br>`
-      }      
+
+    let popup = `<h2>${props.Athlete}</h2><h3>${props.Description}</h3>${props.image}` // fill popup with specific desired content
+
+    var toprightOptions = {
+      maxWidth: 'auto',
+      maxHeight: 320, // set maximum height of the popup content to 320 pixels
+      offset: [175, 0], // set initial position to the top-right of clicked point
+    }
+
+    var bottomrightOptions = {
+      maxWidth: 'auto',
+      maxHeight: 320, // set maximum height of the popup content to 320 pixels
+      offset: [175, 400], // set initial position to the top-right of clicked point
+    }
+
+    var topleftOptions = {
+      maxWidth: 'auto',
+      maxHeight: 320, // set maximum height of the popup content to 320 pixels
+      offset: [-175, 0], // set initial position to the top-right of clicked point
+    }
+
+    var bottomleftOptions = {
+      maxWidth: 'auto',
+      maxHeight: 320, // set maximum height of the popup content to 320 pixels
+      offset: [-175, 400], // set initial position to the top-right of clicked point
     }
 
     feature.layer = layer
-    layer.bindPopup(popup, {
-      maxWidth: 'auto'
+
+    var pointLat = layer._latlng.lat; // get the latitude of each point
+    var pointLng = layer._latlng.lng; // get the longitude of each point
+
+    var bnds = map.getBounds(); // get the bounding coordinates of the map on initial zoom level
+    var maxLat = bnds.getNorth(); // get the north most latitude
+    var maxLng = bnds.getEast(); // get the east most longitude
+    var minLat = bnds.getSouth(); // get the south most latitude
+    var minLng = bnds.getWest(); // get the west most longitude
+
+    // change the position of the popup to bottom-left if it is too far northeast
+    if (pointLat > maxLat - ((maxLat - minLat) / 3) && pointLng > maxLng - ((maxLng - minLng) / 6)) {
+      layer.bindPopup(popup, bottomleftOptions);
+    }
+    // change the position of the popup to bottom-right if it is too far north or northwest
+    else if (pointLat > maxLat - ((maxLat - minLat) / 3) || pointLat > maxLat - ((maxLat - minLat) / 3) && pointLng < minLng + ((maxLng - minLng) / 6)) {
+      layer.bindPopup(popup, bottomrightOptions);
+    }
+    // change the position of the popup to top-left if it is too far east or southeast
+    else if (pointLng > maxLng - ((maxLng - minLng) / 6) || pointLat < minLat + ((maxLat - minLat) / 3) && pointLng > maxLng - ((maxLng - minLng) / 6)) {
+      layer.bindPopup(popup, topleftOptions);
+    }
+    // otherwise, place the popup to the top-right
+    else layer.bindPopup(popup, toprightOptions);
+
+    // get the revised bounding coordinates of the map upon dragging or zooming
+    map.on('dragend zoomend', function onDragEnd() {
+      var boundings = map.getBounds();
+      var maxY = boundings.getNorth();
+      var minY = boundings.getSouth();
+      var maxX = boundings.getEast();
+      var minX = boundings.getWest();
+
+      // change the position of the popup to bottom-left if it is too far northeast
+      if (pointLat > maxY - ((maxY - minY) / 3) && pointLng > maxX - ((maxX - minX) / 6)) {
+        layer.bindPopup(popup, bottomleftOptions);
+      }
+      // change the position of the popup to bottom-right if it is too far north or northwest
+      else if (pointLat > maxY - ((maxY - minY) / 3) || pointLat > maxY - ((maxY - minY) / 3) && pointLng < minX + ((maxX - minX) / 6)) {
+        layer.bindPopup(popup, bottomrightOptions);
+      }
+      // change the position of the popup to top-left if it is too far east or southeast
+      else if (pointLng > maxX - ((maxX - minX) / 6) || pointLat < minY + ((maxY - minY) / 3) && pointLng > maxX - ((maxX - minX) / 6)) {
+        layer.bindPopup(popup, topleftOptions);
+      }
+      // otherwise, place the popup to the top-right
+      else layer.bindPopup(popup, toprightOptions);
     })
+
+    // added the following code from https://stackoverflow.com/questions/51732698/leaflet-popup-update-resizing-solution-recreating-a-popup-everytime-unable
+    // in order to update the popup before displaying so that images do not exceed the popup container upon the user's first click
+    document.querySelector(".leaflet-popup-pane").addEventListener("load", function(event) {
+      var tagName = event.target.tagName,
+        pop = map._popup;
+      // Also check if flag is already set.
+      if (tagName === "IMG" && pop && !pop._updated) {
+        pop._updated = true; // Set flag to prevent looping.
+        pop.update();
+      }
+    }, true);
+
   }
 }
 
@@ -59,7 +136,7 @@ let searchLayer = L.geoJson(mainlayerJson, {
 })
 
 let sliderControl = L.control.sliderControl({
-  position: 'topright',
+  position: 'bottomleft',
   layer: timelineLayer,
   range: true,
   alwaysShowDate: true
@@ -75,7 +152,7 @@ let searchOptions = {
   layerToToggle: searchLayer,
   threshold: 0.5, // default is .5, will match imperfect results
   showResultFct: function(feature, container) {
-    props = feature.properties    
+    props = feature.properties
     let name = L.DomUtil.create('b', null, container)
     name.innerHTML = mapFeatures[0][0]
     container.appendChild(L.DomUtil.create('br', null, container))
@@ -116,7 +193,7 @@ function displayFeatures(features, layer) {
 
 let bounds = L.latLngBounds(mainlayer)
 
-map.fitBounds(mainlayer.getBounds())
+//map.fitBounds(mainlayer.getBounds())
 
 let overlays = {}
 overlays[mainlayerName] = mainlayer
@@ -125,15 +202,15 @@ let baseMaps = {
   '<strong>Layer List</strong>': basemap
 }
 
-L.LegendControl = L.Control.extend({ 
-  onAdd: function (map) {
+L.LegendControl = L.Control.extend({
+  onAdd: function(map) {
 
-   let div = L.DomUtil.create('div', 'info legend')
-   let labels = []
+    let div = L.DomUtil.create('div', 'info legend')
+    let labels = []
 
-   labels.push(
-    `<i style="background: ${markercolor.fillColor}"></i> inactive`,
-    `<i style="background: ${timeMarkers.fillColor}"></i> active`
+    labels.push(
+      `<i style="background: ${markercolor.fillColor}"></i> inactive`,
+      `<i style="background: ${timeMarkers.fillColor}"></i> active`
     )
 
     div.innerHTML = labels.join('<br>')
@@ -142,7 +219,7 @@ L.LegendControl = L.Control.extend({
 });
 
 L.legendControl = function(options) {
-    return new L.LegendControl(options);
+  return new L.LegendControl(options);
 }
 
 
@@ -156,7 +233,9 @@ map.addControl(searchControl)
 map.addControl(sliderControl)
 
 if (timeline === true) {
-  L.legendControl({position: 'bottomright'}).addTo(map)
+  L.legendControl({
+    position: 'bottomright'
+  }).addTo(map)
   sliderControl.startSlider()
 }
 
